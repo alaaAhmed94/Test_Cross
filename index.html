@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <title>عرض المنتجات من ERP</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+        background-color: #f5f5f5;
+        color: #333;
+        text-align: right;
+      }
+
+      h1 {
+        color: #007bff;
+      }
+
+      button {
+        padding: 10px 20px;
+        margin: 10px 5px;
+        border: none;
+        background-color: #007bff;
+        color: white;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+
+      button:hover {
+        background-color: #0056b3;
+      }
+
+      .product {
+        background-color: #fff;
+        border: 1px solid #ccc;
+        padding: 15px;
+        margin: 15px 0;
+        border-radius: 5px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      }
+
+      .product img {
+        margin-top: 10px;
+        border-radius: 5px;
+      }
+
+      #token-display {
+        margin-top: 20px;
+        background-color: #e6f0ff;
+        padding: 15px;
+        border: 1px dashed #007bff;
+        border-radius: 5px;
+        word-break: break-all;
+        direction: ltr;
+        color: #000;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>قائمة المنتجات</h1>
+
+    <button onclick="getToken()">جلب التوكن</button>
+    <button onclick="fetchProducts()">جلب المنتجات</button>
+
+    <div id="token-display">التوكن لم يتم تحميله بعد.</div>
+    <div id="products"></div>
+
+    <script>
+      const tokenUrl = "https://www.erp.prosofteg.com/oauth/token";
+      const productsUrl = "http://www.erp.prosofteg.com/connector/api/product/";
+
+      async function getToken() {
+        const formData = new FormData();
+        formData.append("grant_type", "password");
+        formData.append("client_id", "2");
+        formData.append(
+          "client_secret",
+          "NgqMNTvlvlwI3kSKucSTsS8JWKIkHNd2UStRqoCz"
+        );
+        formData.append("username", "admin");
+        formData.append("password", "123456");
+        formData.append("scope", "");
+
+        try {
+          const res = await fetch(tokenUrl, {
+            method: "POST",
+            body: formData,
+          });
+
+          const data = await res.json();
+          if (data.access_token) {
+            localStorage.setItem("erp_token", data.access_token);
+            document.getElementById("token-display").textContent =
+              "التوكن: " + data.access_token;
+          } else {
+            document.getElementById("token-display").textContent =
+              "فشل في جلب التوكن.";
+          }
+        } catch (error) {
+          console.error("خطأ في جلب التوكن:", error);
+          document.getElementById("token-display").textContent =
+            "حدث خطأ أثناء جلب التوكن.";
+        }
+      }
+
+      async function getValidToken() {
+        let token = localStorage.getItem("erp_token");
+        if (!token) {
+          alert("يرجى جلب التوكن أولاً.");
+          throw new Error("لا يوجد توكن.");
+        }
+        return token;
+      }
+
+      async function fetchProducts() {
+        const display = document.getElementById("products");
+        display.innerHTML = "جارٍ تحميل المنتجات...";
+
+        let token;
+        try {
+          token = await getValidToken();
+        } catch {
+          display.textContent = "يرجى جلب التوكن أولاً.";
+          return;
+        }
+
+        async function tryFetchProducts(usingToken, retry = false) {
+          const res = await fetch(productsUrl, {
+            headers: {
+              Authorization: `Bearer ${usingToken}`,
+            },
+          });
+
+          if (res.status === 401 && !retry) {
+            const newToken = await getToken();
+            return tryFetchProducts(newToken, true);
+          }
+
+          if (!res.ok) throw new Error("فشل في جلب المنتجات.");
+          return res.json();
+        }
+
+        try {
+          const data = await tryFetchProducts(token);
+
+          if (!data.data || !Array.isArray(data.data)) {
+            display.textContent = "لا توجد منتجات.";
+            return;
+          }
+
+          display.innerHTML = "";
+          data.data.forEach((product) => {
+            const item = document.createElement("div");
+            item.className = "product";
+            item.innerHTML = `
+              <strong>اسم المنتج:</strong> ${product.name} <br>
+              <strong>التصنيف:</strong> ${product.cat_name} <br>
+              <strong>الكمية:</strong> ${product.stock} <br>
+              <strong>السعر:</strong> ${product.price} <br>
+              <img src="${product.image_url}" alt="صورة المنتج" width="100">
+            `;
+            display.appendChild(item);
+          });
+        } catch (err) {
+          console.error(err);
+          display.textContent = "حدث خطأ أثناء جلب المنتجات.";
+        }
+      }
+    </script>
+  </body>
+</html>
